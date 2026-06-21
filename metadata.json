@@ -1,0 +1,10 @@
+{
+  "name": "Zoe Voice & WhatsApp Assistant",
+  "description": "Unified assistant combining WhatsApp voice notes with Gemini TTS, Twilio Voice Dialer with Gemini Live, and WhatsApp text messaging.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

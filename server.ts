@@ -450,7 +450,7 @@ app.post('/api/contacts/get', async (req, res) => {
     const sb = getSupabaseClient(req);
     const defaultContacts = [
       { id: '1', name: 'Sayyan Abdullah', phone: '+923237936230', email: 'sayyan@example.com' },
-      { id: '2', name: 'Muhammad Abdullah', phone: '+923216495545', email: 'mabdullah@example.com' },
+      { id: '2', name: 'Muhammad Abdullah', phone: '+923433069279', email: 'mabdullah@example.com' },
       { id: '3', name: 'Abdullah Ghazi', phone: '+923225287071', email: 'aghazi@example.com' },
       { id: '4', name: 'Abdullah 191', phone: '+9234567890', email: 'abdullah191@example.com' },
       { id: '5', name: 'Subhan Sajid', phone: '+923156580005', email: 'subhan@example.com' },
@@ -527,10 +527,10 @@ app.post('/api/log-action', async (req, res) => {
 // ── Email Sending via EmailJS ──
 app.post('/api/send-email', async (req, res) => {
   try {
-    const { to_email, to_name, subject, message } = req.body;
+    const { to_email, to_name, subject, message, template_type } = req.body;
     
-    if (!to_email || !to_name || !subject || !message) {
-      return res.status(400).json({ error: 'Missing required fields: to_email, to_name, subject, message' });
+    if (!to_email || !to_name) {
+      return res.status(400).json({ error: 'Missing required fields: to_email, to_name' });
     }
     
     // Get EmailJS config from Supabase
@@ -550,7 +550,32 @@ app.post('/api/send-email', async (req, res) => {
       return res.status(400).json({ error: 'EmailJS config not found in database. Please add email_js_config table with credentials.' });
     }
     
-    console.log('[Email] Sending email to:', to_email, 'Subject:', subject);
+    // Determine which template to use
+    let templateId;
+    let templateParams;
+    
+    if (template_type === 'otp') {
+      // OTP Template
+      templateId = emailConfig.template_id_otp;
+      templateParams = {
+        user_name: to_name,
+        otp_code: message,
+        expiry_time: '5'
+      };
+      console.log('[Email] Sending OTP to:', to_email);
+    } else {
+      // Regular Email Template
+      templateId = emailConfig.template_id_email;
+      templateParams = {
+        recipient_name: to_name,
+        recipient_email: to_email,
+        email: 'abdullah422847@gmail.com',
+        name: 'Abdullah',
+        message: message || subject,
+        current_date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+      };
+      console.log('[Email] Sending regular email to:', to_email, 'Subject:', subject);
+    }
     
     // Send via EmailJS API
     const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
@@ -558,14 +583,9 @@ app.post('/api/send-email', async (req, res) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         service_id: emailConfig.service_id,
-        template_id: emailConfig.template_id_email,
+        template_id: templateId,
         user_id: emailConfig.public_key,
-        template_params: {
-          to_email: to_email,
-          to_name: to_name,
-          subject: subject,
-          message: message,
-        },
+        template_params: templateParams,
       }),
     });
     
@@ -575,23 +595,56 @@ app.post('/api/send-email', async (req, res) => {
       throw new Error(`EmailJS error: ${text}`);
     }
     
-    // Log the action
-    try {
-      await sb.from('action_logs').insert([{
-        action_type: 'email',
-        target_name: to_name,
-        target_value: to_email,
-        message: subject + '\n\n' + message,
-        result: { success: true }
-      }]);
-    } catch (logErr) {
-      console.error('[Email] Failed to log action:', logErr);
+    // Log the action (only for regular emails, not OTP)
+    if (template_type !== 'otp') {
+      try {
+        await sb.from('action_logs').insert([{
+          action_type: 'email',
+          target_name: to_name,
+          target_value: to_email,
+          message: subject + '\n\n' + message,
+          result: { success: true }
+        }]);
+      } catch (logErr) {
+        console.error('[Email] Failed to log action:', logErr);
+      }
     }
     
-    res.json({ success: true, message: 'Email sent successfully' });
+    res.json({ success: true, message: template_type === 'otp' ? 'OTP sent successfully' : 'Email sent successfully' });
     
   } catch (err: any) {
     console.error('[Email] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Send OTP specifically ──
+app.post('/api/send-otp', async (req, res) => {
+  try {
+    const { email, name, otp } = req.body;
+    
+    if (!email || !name || !otp) {
+      return res.status(400).json({ error: 'Missing required fields: email, name, otp' });
+    }
+    
+    // Forward to send-email with otp template type
+    const response = await fetch(`${req.protocol}://${req.get('host')}/api/send-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to_email: email,
+        to_name: name,
+        subject: 'Your OTP Code',
+        message: otp,
+        template_type: 'otp'
+      })
+    });
+    
+    const data = await response.json();
+    res.json(data);
+    
+  } catch (err: any) {
+    console.error('[OTP] Error:', err);
     res.status(500).json({ error: err.message });
   }
 });

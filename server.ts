@@ -586,7 +586,7 @@ Rules:
 Do NOT return backticks, markdown, block wrapping, or any other explanations.`;
 
     const response = await aiInstance.models.generateContent({
-      model: 'models/gemini-2.0-flash',
+      model: 'models/gemini-2.5-flash',
       contents: userInput,
       config: {
         systemInstruction: systemPrompt,
@@ -799,7 +799,7 @@ app.post("/api/whatsapp/send-voice", async (req, res) => {
 
     // Step A: Generate Spoken Text using gemini-2.0-flash
     const textGenResponse = await aiInstance.models.generateContent({
-      model: "models/gemini-2.0-flash",
+      model: "models/gemini-2.5-flash",
       contents: systemPrompt,
     });
 
@@ -971,7 +971,7 @@ Rules of Engagement:
 
       // Bridge Live session using gemini-2.5-flash-live-preview (more stable than 3.1)
       const session = await aiInstance.live.connect({
-        model: 'models/gemini-2.5-flash',
+        model: 'models/gemini-3.0-flash',
         config: {
           responseModalities: ['AUDIO' as any],
           speechConfig: {

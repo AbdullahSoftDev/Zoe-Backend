@@ -449,9 +449,13 @@ app.post('/api/contacts/get', async (req, res) => {
   try {
     const sb = getSupabaseClient(req);
     const defaultContacts = [
-      { id: '1', name: 'Sayyan', phone: '+923001234567', email: 'sayyan@zoom.com' },
-      { id: '2', name: 'Zain', phone: '+923339876543', email: 'zain@zoeassistant.com' },
-      { id: '3', name: 'Ayesha Khan', phone: '+14155552671', email: 'ayesha@clientreview.io' }
+      { id: '1', name: 'Sayyan Abdullah', phone: '+923237936230', email: 'sayyan@example.com' },
+      { id: '2', name: 'Muhammad Abdullah', phone: '+923216495545', email: 'mabdullah@example.com' },
+      { id: '3', name: 'Abdullah Ghazi', phone: '+923225287071', email: 'aghazi@example.com' },
+      { id: '4', name: 'Abdullah 191', phone: '+9234567890', email: 'abdullah191@example.com' },
+      { id: '5', name: 'Subhan Sajid', phone: '+923156580005', email: 'subhan@example.com' },
+      { id: '6', name: 'Hassan Rauf', phone: '+923336580005', email: 'hassan@example.com' },
+      { id: '7', name: 'Mama', phone: '+923216495545', email: 'mama@example.com' }
     ];
 
     if (!sb) {
@@ -520,6 +524,79 @@ app.post('/api/log-action', async (req, res) => {
 });
 
 
+// ── Email Sending via EmailJS ──
+app.post('/api/send-email', async (req, res) => {
+  try {
+    const { to_email, to_name, subject, message } = req.body;
+    
+    if (!to_email || !to_name || !subject || !message) {
+      return res.status(400).json({ error: 'Missing required fields: to_email, to_name, subject, message' });
+    }
+    
+    // Get EmailJS config from Supabase
+    const sb = getSupabaseClient(req);
+    if (!sb) {
+      return res.status(400).json({ error: 'Supabase not connected' });
+    }
+    
+    const { data: emailConfig, error: configError } = await sb
+      .from('email_js_config')
+      .select('*')
+      .limit(1)
+      .single();
+    
+    if (configError || !emailConfig) {
+      console.error('[Email] Config error:', configError);
+      return res.status(400).json({ error: 'EmailJS config not found in database. Please add email_js_config table with credentials.' });
+    }
+    
+    console.log('[Email] Sending email to:', to_email, 'Subject:', subject);
+    
+    // Send via EmailJS API
+    const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service_id: emailConfig.service_id,
+        template_id: emailConfig.template_id_email,
+        user_id: emailConfig.public_key,
+        template_params: {
+          to_email: to_email,
+          to_name: to_name,
+          subject: subject,
+          message: message,
+        },
+      }),
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('[Email] EmailJS error:', text);
+      throw new Error(`EmailJS error: ${text}`);
+    }
+    
+    // Log the action
+    try {
+      await sb.from('action_logs').insert([{
+        action_type: 'email',
+        target_name: to_name,
+        target_value: to_email,
+        message: subject + '\n\n' + message,
+        result: { success: true }
+      }]);
+    } catch (logErr) {
+      console.error('[Email] Failed to log action:', logErr);
+    }
+    
+    res.json({ success: true, message: 'Email sent successfully' });
+    
+  } catch (err: any) {
+    console.error('[Email] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // ── Speech-to-Intent Dynamic Extractor ──
 app.post('/api/extract-intent', async (req, res) => {
   try {
@@ -558,7 +635,11 @@ app.post('/api/extract-intent', async (req, res) => {
       }
     });
 
-    const contactsContext = JSON.stringify(contactsList);
+    const contactsContext = JSON.stringify(contactsList.map(c => ({
+      name: c.name,
+      phone: c.phone || null,
+      email: c.email || null
+    })));
 
     const systemPrompt = `You are the intent extractor for Zoe, an integrated and highly expressive AI voice/WhatsApp assistant.
 Your task is to take a natural language user request, map it to the contacts list, and parse the action and target message parameters.
@@ -567,21 +648,24 @@ Available contacts:
 ${contactsContext}
 
 Rules:
-1. Examine the user query (e.g., "call Sayyan telling him that meeting has been delayed to 4pm", "voice message to Zain saying hi, how are you", "text Zain saying are you free?").
+1. Examine the user query (e.g., "call Sayyan telling him that meeting has been delayed to 4pm", "voice message to Zain saying hi, how are you", "text Zain saying are you free?", "email Abdullah saying I can't come to office today because I am sick").
 2. Extract:
    - "action": strictly one of:
      - "call" (for phone calls / Twilio dialing requests)
      - "voice_message" (for voice message requests on WhatsApp)
      - "text" (for text message requests on WhatsApp)
+     - "email" (for email requests)
    - "contactName": name of the contact matched (match name accurately or intelligently)
    - "message": the actual message they want to convey (translated/cleaned to dry message format)
-   - "phone": the resolved phone number of that contact. If not found in database, return null or extract phone from text if user dictated digits.
+   - "phone": the resolved phone number of that contact. If not found in database, return null.
+   - "email": the resolved email address of that contact. If not found in database, return null.
 3. Return ONLY a well-formed JSON object formatted with double quoted keys, like:
 {
   "action": "call",
-  "contactName": "Sayyan",
+  "contactName": "Sayyan Abdullah",
   "message": "Your meeting is at 5pm through Zoom",
-  "phone": "+923001234567"
+  "phone": "+923237936230",
+  "email": "sayyan@example.com"
 }
 Do NOT return backticks, markdown, block wrapping, or any other explanations.`;
 
@@ -655,7 +739,7 @@ app.post('/api/call/trigger', async (req, res) => {
     const appUrl = process.env.APP_URL || `https://${req.headers.host}`;
     const cleanAppUrl = appUrl.replace(/\/$/, ''); // strip trailing slash
     
-    const twimlUrl = `${cleanAppUrl}/api/twilio-twiml?contactName=${encodeURIComponent(contactName)}&message=${encodeURIComponent(message)}`;
+    const twimlUrl = `${cleanAppUrl}/api/twilio-twiml?contactName=${encodeURIComponent(contactName || 'Guest')}&message=${encodeURIComponent(message || 'Hello from Zoe!')}`;
 
     console.log(`[Twilio outbound] Initiating calling pipeline to: ${phone} from: ${fromNum} with TwiML: ${twimlUrl}`);
 
@@ -741,7 +825,7 @@ app.post("/api/whatsapp/send-voice", async (req, res) => {
   }
 
   try {
-    console.log(`Starting voice notes pipeline for: ${phoneNumber} using engine: ${voiceEngine}`);
+    console.log(`Starting voice notes pipeline for: ${phoneNumber} using engine: ${voiceEngine || 'gemini-tts'}`);
 
     let geminiKey = process.env.GEMINI_API_KEY;
     try {
@@ -780,7 +864,7 @@ app.post("/api/whatsapp/send-voice", async (req, res) => {
       - This generated text will be converted to audio and sent directly as a voice message TO the contact recipient.
       - Therefore, do NOT say "I will send this" or "Understood" or reply to your owner.
       - Instead, speak directly to the contact (the recipient) ON BEHALF of your owner, converting their core message ("${prompt}") into a beautiful, warm, polite, and respectful greeting.
-      - Use friendly conversational first-person (or speak clearly on behalf of your owner). For example, if the owner wants to say "i am not free today", convert it into something humble and beautiful like: "Salam! Main aaj thoda busy hoon, is liye free nahi ho sakunga. Insha'Allah hum jald hi baat karenge. Apna khayal rakhiyega!" (or the corresponding English/Urdu translation depending on the chosen language/mode).
+      - Use friendly conversational first-person (or speak clearly on behalf of your owner).
       
       TONE & STYLE RULES:
       - Speak directly to the contact recipient on behalf of your owner.
@@ -790,14 +874,14 @@ app.post("/api/whatsapp/send-voice", async (req, res) => {
       - Never discuss system configurations or logs.
       
       LANGUAGE CONSTRAINT (Strictly obey):
-      - Selected mode: "${language}"
+      - Selected mode: "${language || 'Bilingual'}"
       - For "English": Speak in pure, clear, friendly English on behalf of your owner.
       - For "Urdu Script": Speak in standard, polite Urdu script (اردو) on behalf of your owner.
       - For "Roman Urdu": Speak in standard, friendly Roman Urdu (conversational Urdu written with the Latin alphabet) on behalf of your owner.
       - For "Bilingual": Blend English and Roman Urdu gracefully, like a close bilingual friend speaking casually on behalf of your owner.
     `;
 
-    // Step A: Generate Spoken Text using gemini-2.0-flash
+    // Step A: Generate Spoken Text using gemini-2.5-flash
     const textGenResponse = await aiInstance.models.generateContent({
       model: "models/gemini-2.5-flash",
       contents: systemPrompt,
@@ -969,9 +1053,9 @@ Rules of Engagement:
   * HINDI IS COMPLETELY FORBIDDEN. Never use Hindi vocabulary.
 - Rephrase the target message cleanly to be addressed directly to ${contactName} (e.g., change "tell his meeting is at 5pm through Zoom" to "your meeting is at 5:00 PM through Zoom").`;
 
-      // Bridge Live session using gemini-2.5-flash-live-preview (more stable than 3.1)
+      // Bridge Live session using gemini-3-flash
       const session = await aiInstance.live.connect({
-        model: 'models/gemini-3.0-flash',
+        model: 'models/gemini-3-flash',
         config: {
           responseModalities: ['AUDIO' as any],
           speechConfig: {

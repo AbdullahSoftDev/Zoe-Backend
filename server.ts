@@ -586,7 +586,7 @@ Rules:
 Do NOT return backticks, markdown, block wrapping, or any other explanations.`;
 
     const response = await aiInstance.models.generateContent({
-      model: 'gemini-1.5-pro',
+      model: 'models/gemini-2.0-flash',
       contents: userInput,
       config: {
         systemInstruction: systemPrompt,
@@ -797,9 +797,9 @@ app.post("/api/whatsapp/send-voice", async (req, res) => {
       - For "Bilingual": Blend English and Roman Urdu gracefully, like a close bilingual friend speaking casually on behalf of your owner.
     `;
 
-    // Step A: Generate Spoken Text via highly capable models/gemini-3.5-flash
+    // Step A: Generate Spoken Text using gemini-2.0-flash
     const textGenResponse = await aiInstance.models.generateContent({
-      model: "gemini-1.5-pro",
+      model: "models/gemini-2.0-flash",
       contents: systemPrompt,
     });
 
@@ -817,7 +817,7 @@ app.post("/api/whatsapp/send-voice", async (req, res) => {
       console.log(`Using server-side Gemini Multilingual TTS model with voice: ${voiceName || 'Zephyr'}`);
       
       const ttsResponse = await aiInstance.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: "models/gemini-2.5-flash-preview-tts",
         contents: `Say this exactly with a clear, friendly accent: ${generatedText}`,
         config: {
           responseModalities: ["AUDIO"],
@@ -969,9 +969,9 @@ Rules of Engagement:
   * HINDI IS COMPLETELY FORBIDDEN. Never use Hindi vocabulary.
 - Rephrase the target message cleanly to be addressed directly to ${contactName} (e.g., change "tell his meeting is at 5pm through Zoom" to "your meeting is at 5:00 PM through Zoom").`;
 
-      // Bridge Live session using gemini-3.1-flash-live-preview
+      // Bridge Live session using gemini-2.5-flash-live-preview (more stable than 3.1)
       const session = await aiInstance.live.connect({
-        model: 'gemini-3.1-flash-live-preview',
+        model: 'models/gemini-2.5-flash',
         config: {
           responseModalities: ['AUDIO' as any],
           speechConfig: {

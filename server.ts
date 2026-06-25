@@ -817,7 +817,7 @@ app.post("/api/whatsapp/send-voice", async (req, res) => {
       console.log(`Using server-side Gemini Multilingual TTS model with voice: ${voiceName || 'Zephyr'}`);
       
       const ttsResponse = await aiInstance.models.generateContent({
-        model: "gemini-3.1-flash-tts-preview",
+        model: "gemini-2.5-flash-preview-tts",
         contents: `Say this exactly with a clear, friendly accent: ${generatedText}`,
         config: {
           responseModalities: ["AUDIO"],

@@ -586,7 +586,7 @@ Rules:
 Do NOT return backticks, markdown, block wrapping, or any other explanations.`;
 
     const response = await aiInstance.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-1.5-flash',
       contents: userInput,
       config: {
         systemInstruction: systemPrompt,
@@ -799,7 +799,7 @@ app.post("/api/whatsapp/send-voice", async (req, res) => {
 
     // Step A: Generate Spoken Text via highly capable models/gemini-3.5-flash
     const textGenResponse = await aiInstance.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-1.5-flash",
       contents: systemPrompt,
     });
 
